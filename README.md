@@ -1,5 +1,7 @@
 # haptic-things
 
+![alt text](image.webp)
+
 The idea is to build 3D printed objects, such as spheres and cubes, and embed in them the illusion of friction?
 
 ## Components
