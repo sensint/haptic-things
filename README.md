@@ -2,7 +2,7 @@
 
 ![alt text](image.webp)
 
-The idea is to build 3D printed objects, such as spheres and cubes, and embed in them the illusion of friction?
+The idea is to build self-contained 3D-printed objects, such as spheres and cubes, and embed the illusion of friction in them. Ideally, we should be able to change the vibration parameters using Bluetooth.
 
 ## Components
 1. [Actuator: VG1040003D](https://www.digikey.com/en/products/detail/vybronics-inc/VG1040003D/10285886)
