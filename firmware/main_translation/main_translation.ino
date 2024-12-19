@@ -27,7 +27,7 @@ elapsedMicros pulseTimeUS = 0;
 bool isVibrating = false;
 bool shouldVibrate = false;
 
-float deltaSensor = 50.0;
+float deltaSensor = 1.0;
 long deltaCurrent = 0.0;
 long cumulativeDelta = 0;
 
@@ -80,6 +80,15 @@ elapsedMillis timer_imu_data = 0;
 double m_x, m_y, m_z = 0.0;
 double prev_mx, prev_my, prev_mz = 0.0;
 double delta_x, delta_y, delta_z = 0.0;
+
+double velocityX = 0;
+double positionX = 0;
+double prev_positionX = 0;
+double velocityY = 0;
+double positionY = 0;
+double velocityZ = 0;
+double positionZ = 0;
+unsigned long prevTime = 0;
 
 // ====== LED ======
 const uint8_t dataPin = 10;
@@ -250,32 +259,8 @@ void setup() {
   for (int i = 0; i < bufferSize; i++) {
     buffer[i] = 0;
   }
-}
 
-void quaternionToEuler(float qr, float qi, float qj, float qk, euler_t* ypr, bool degrees = false) {
-
-  float sqr = sq(qr);
-  float sqi = sq(qi);
-  float sqj = sq(qj);
-  float sqk = sq(qk);
-
-  ypr->yaw = atan2(2.0 * (qi * qj + qk * qr), (sqi - sqj - sqk + sqr));
-  ypr->pitch = asin(-2.0 * (qi * qk - qj * qr) / (sqi + sqj + sqk + sqr));
-  ypr->roll = atan2(2.0 * (qj * qk + qi * qr), (-sqi - sqj + sqk + sqr));
-
-  if (degrees) {
-    ypr->yaw *= RAD_TO_DEG;
-    ypr->pitch *= RAD_TO_DEG;
-    ypr->roll *= RAD_TO_DEG;
-  }
-}
-
-void quaternionToEulerRV(sh2_RotationVectorWAcc_t* rotational_vector, euler_t* ypr, bool degrees = false) {
-  quaternionToEuler(rotational_vector->real, rotational_vector->i, rotational_vector->j, rotational_vector->k, ypr, degrees);
-}
-
-void quaternionToEulerGI(sh2_GyroIntegratedRV_t* rotational_vector, euler_t* ypr, bool degrees = false) {
-  quaternionToEuler(rotational_vector->real, rotational_vector->i, rotational_vector->j, rotational_vector->k, ypr, degrees);
+  prevTime = millis(); // Initialize time
 }
 
 void loop() {
@@ -285,42 +270,47 @@ void loop() {
     setReports(reportType, reportIntervalUs);
   }
 
-  if (timer_imu_data >= sampleInterval) {
-  timer_imu_data = 0;  // Update the last sample time
+  //if (timer_imu_data >= sampleInterval) {
+  // timer_imu_data = 0;  // Update the last sample time
 
   if (bno08x.getSensorEvent(&sensorValue)) {
     // in this demo only one report type will be received depending on FAST_MODE define (above)
-    switch (sensorValue.sensorId) {
-      case SH2_ARVR_STABILIZED_RV:
-        quaternionToEulerRV(&sensorValue.un.arvrStabilizedRV, &ypr, true);
-      case SH2_GYRO_INTEGRATED_RV:
-        // faster (more noise?)
-        quaternionToEulerGI(&sensorValue.un.gyroIntegratedRV, &ypr, true);
-        break;
-    }
 
-    // Get roll, pitch, yaw
-    Serial.print(sensorValue.status);
-    Serial.print("\t");  // This is accuracy in the range of 0 to 3
-    Serial.print(ypr.yaw);
-    Serial.print("\t");
-    Serial.print(ypr.pitch);
-    Serial.print("\t");
-    Serial.println(ypr.roll);
-    m_x = ypr.yaw;
-    m_y = ypr.pitch;
-    m_z = ypr.roll;
 
-    delta_x = fabs(m_x - prev_mx) * 10.0;
-    delta_y = fabs(m_y - prev_my) * 10.0;
-    delta_z = fabs(m_z - prev_mz) * 10.0;
+    // Get accelarion values
+    m_x = sensorValue.un.linearAcceleration.x;
+    m_y = sensorValue.un.linearAcceleration.y;
+    m_z = sensorValue.un.linearAcceleration.z;
 
-    deltaCurrent = delta_x + delta_y + delta_z;
+    unsigned long currentTime = millis();
+    float deltaTime = (currentTime - prevTime) / 1000.0;  // Convert ms to seconds
+    prevTime = currentTime;
+
+    // delta_x = fabs(m_x - prev_mx) * 10.0;
+    // delta_y = fabs(m_y - prev_my) * 10.0;
+    // delta_z = fabs(m_z - prev_mz) * 10.0;
+
+    velocityX += m_x * deltaTime;
+    velocityY += m_y * deltaTime;
+    velocityZ += m_z * deltaTime;
+
+    positionX += velocityX * deltaTime;
+    positionY += velocityY * deltaTime;
+    positionZ += velocityZ * deltaTime;
+
+    delta_x = fabs(positionX - prev_positionX);
+    deltaCurrent = delta_x;
     cumulativeDelta += deltaCurrent;
+    prev_positionX = positionX;
 
-    prev_mx = m_x;
-    prev_my = m_y;
-    prev_mz = m_z;
+    // Print results
+  Serial.print("Acceleration (X): ");
+  Serial.print(m_x);
+  Serial.print(" m/s^2, Velocity (X): ");
+  Serial.print(velocityX);
+  Serial.print(" m/s, Position (X): ");
+  Serial.print(positionX);
+  Serial.println(" m");
   }
 
   // ======= LED LOGIC =========
@@ -357,7 +347,7 @@ void loop() {
   //   }
   //   Serial.println();  // End the transmission with a newline
   // }
-  }
+  //}
 
   // ===== Serial communication with processing ========
   if (Serial.available() > 0) {
