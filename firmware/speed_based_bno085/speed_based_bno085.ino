@@ -42,7 +42,7 @@ elapsedMicros pulseTimeUS = 0;
 bool isVibrating = false;
 bool shouldVibrate = false;
 
-float deltaSensor = 7.0;
+float deltaSensor = 10.0;
 long deltaCurrent = 0.0;
 long cumulativeDelta = 0;
 
@@ -74,6 +74,19 @@ double positionY = 0;
 double velocityZ = 0;
 double positionZ = 0;
 unsigned long prevTime = 0;
+
+float filteredAccelerationX = 0.0;  // Filtered acceleration
+float alpha = 0.1;                  // Smoothing factor for the filter (adjust as needed)
+
+uint16_t BNO055_SAMPLERATE_DELAY_MS = 2.5;  //how often to read data from the board
+uint16_t PRINT_DELAY_MS = 500;              // how often to print the data
+uint16_t printCount = 0;                    //counter to avoid printing every 10MS sample
+
+//velocity = accel*dt (dt in seconds)
+//position = 0.5*accel*dt^2
+double ACCEL_VEL_TRANSITION = (double)(BNO055_SAMPLERATE_DELAY_MS) / 1000.0;
+double ACCEL_POS_TRANSITION = 0.5 * ACCEL_VEL_TRANSITION * ACCEL_VEL_TRANSITION;
+
 
 // ==== Mean value speed ======
 const int bufferSize = 50;  // Number of values to store
@@ -110,16 +123,7 @@ void MyCallback(float** in, float** out, size_t size) {
 // START - FUNCTIONS FOR GRAIN FEEDBACK //
 //////////////////////////////////////////
 
-// this function triggers a grain
-void generateTrigger() {
-  if (cumulativeDelta >= deltaSensor) {  //deltasensor should be a parameter, so we can modulate it
-    shouldVibrate = true;
-    cumulativeDelta = 0.0;
 
-  } else {
-    shouldVibrate = false;
-  }
-}
 
 // this function plays the grain
 void GenerateGrain(float freq, bool* vibrateFlag, float* amplitude_value, float newAmpValue) {
@@ -183,6 +187,16 @@ void modulateAmplitude() {
 // END - FUNCTIONS FOR GRAIN FEEDBACK   //
 //////////////////////////////////////////
 
+// this function triggers a grain
+void generateTrigger() {
+  if (cumulativeDelta >= deltaSensor) {  //deltasensor should be a parameter, so we can modulate it
+    shouldVibrate = true;
+    cumulativeDelta = 0.0;
+
+  } else {
+    shouldVibrate = false;
+  }
+}
 
 void setup() {
   Serial.begin(115200);
@@ -268,6 +282,9 @@ void loop() {
       break;
   }
 
+  filteredAccelerationX = alpha * accelerationX + (1 - alpha) * filteredAccelerationX;
+
+
   unsigned long currentTime = millis();
   float deltaTime = (currentTime - prevTime) / 1000.0;  // Convert ms to seconds
   prevTime = currentTime;
@@ -276,20 +293,23 @@ void loop() {
   // delta_y = fabs(m_y - prev_my) * 10.0;
   // delta_z = fabs(m_z - prev_mz) * 10.0;
 
-  // velocityX += accelerationX * deltaTime;
+  velocityX += accelerationX * deltaTime;
   // velocityY += m_y * deltaTime;
   // velocityZ += m_z * deltaTime;
 
-  velocityX = prev_velocityX + accelerationX * deltaTime;
+  //velocityX = prev_velocityX + accelerationX * deltaTime;
 
 
-  // positionX += velocityX * deltaTime;
+  //positionX += velocityX * deltaTime;
   // positionY += velocityY * deltaTime;
   // positionZ += velocityZ * deltaTime;
 
-  positionX = prev_positionX + velocityX * deltaTime;
-
+  //positionX = prev_positionX + velocityX * deltaTime;
+  positionX = positionX * deltaTime * deltaTime * accelerationX;
   delta_x = fabs(velocityX - prev_velocityX) * 100;
+
+  //delta_x = fabs(positionX - prev_positionX) * 100;
+
   deltaCurrent = delta_x;
   cumulativeDelta += deltaCurrent;
 
@@ -308,6 +328,6 @@ void loop() {
 
 
   // ===== Serial communication with processing ========
-  generateTrigger();  //only can trigger if the sensor values are updated
-  GenerateGrain(freqValue, &shouldVibrate, &ampValue, newAmpValue);
+  //generateTrigger();  //only can trigger if the sensor values are updated
+  //GenerateGrain(freqValue, &shouldVibrate, &ampValue, newAmpValue);
 }
