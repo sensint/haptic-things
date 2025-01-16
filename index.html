@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Haptic Things</title>
+    <!-- Include p5.js and p5.ble.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
+    <script src="https://unpkg.com/p5.ble.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        label {
+            display: block;
+            margin: 10px 0 5px;
+        }
+
+        input {
+            margin-bottom: 15px;
+        }
+
+        button {
+            padding: 10px 20px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Haptic Things</h1>
+
+    <!-- Frequency input -->
+    <label for="frequency">Frequency:</label>
+    <input type="number" id="frequency" name="frequency" step="0.1" placeholder="Enter frequency">
+
+    <!-- Granularity input -->
+    <label for="granularity">Granularity:</label>
+    <input type="number" id="granularity" name="granularity" step="0.1" placeholder="Enter granularity">
+
+    <!-- Checkboxes -->
+    <label><input type="checkbox" id="pressure"> Pressure</label>
+    <label><input type="checkbox" id="tilt"> Tilt</label>
+    <label><input type="checkbox" id="imuX"> IMU X</label>
+    <label><input type="checkbox" id="imuY"> IMU Y</label>
+    <label><input type="checkbox" id="imuZ"> IMU Z</label>
+
+    <!-- Send button -->
+    <button id="sendButton">Send</button>
+
+    <script>
+        let myBLE;
+
+        // Initialize the p5.ble.js instance
+        function setup() {
+            noCanvas(); // No need for a canvas in this application
+            myBLE = new p5ble();
+
+            // Attach the click event to the Send button
+            const sendButton = document.getElementById('sendButton');
+            sendButton.addEventListener('click', sendData);
+        }
+
+        // Function to handle sending data to a BLE device
+        function sendData() {
+            const frequency = parseFloat(document.getElementById('frequency').value);
+            const granularity = parseFloat(document.getElementById('granularity').value);
+            const pressure = document.getElementById('pressure').checked;
+            const tilt = document.getElementById('tilt').checked;
+            const imuX = document.getElementById('imuX').checked;
+            const imuY = document.getElementById('imuY').checked;
+            const imuZ = document.getElementById('imuZ').checked;
+
+            // Create a data object to send
+            const data = {
+                frequency: frequency,
+                granularity: granularity,
+                pressure: pressure,
+                tilt: tilt,
+                imuX: imuX,
+                imuY: imuY,
+                imuZ: imuZ
+            };
+
+            console.log('Data to send:', data);
+
+            // TODO: Implement BLE device connection and send data
+            // Example: myBLE.write(characteristic, JSON.stringify(data));
+        }
+    </script>
+</body>
+
+</html>
