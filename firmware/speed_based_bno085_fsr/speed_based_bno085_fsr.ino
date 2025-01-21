@@ -1,14 +1,50 @@
 #include <DaisyDuino.h>
 #include <Wire.h>
 #include <elapsedMillis.h>
-
 #include <Adafruit_BNO08x.h>
+#include <APA102.h>
+#include "LSM6DSOXSensor.h"
 
-//          /----------------------------------> Calculate Speed ----------------------------------\                                                        
-// Sensor -/---> Calculate Position \---> Generate Triggers --> Generate Grain ---/---> Filter --> Compressor --> Amplitude Modulation
-//                     (optional)    \--> Generate Triggers --> Generate Grain --/
+// ======= Fast IMU SetUp ========
+LSM6DSOXSensor lsm6dsoxSensor = LSM6DSOXSensor(&Wire, LSM6DSOX_I2C_ADD_L);
+int32_t _sensor_tilt_x, sensor_tilt_x, prev_sensor_tilt_x = 0;
+double delta_sensor_tilt_x = 0.0;
+double filteredAccelerationX = 0.0;  // Filtered acceleration
+float alpha = 0.3;                   // Smoothing factor for the filter (adjust as needed)
 
-// New IMU
+// ====== Bluetooth control values ===========
+bool mode_fsr_activated = false;
+bool mode_imu_activated = false;
+bool mode_imu_activated_x, mode_imu_activated_y, mode_imu_activated_z = false;
+bool mode_tilt_activated = false;
+int bt_parameter_frecuency = 9;
+int bt_parameter_delta_sensor = 40;
+
+// ============ Audio/Haptics Flow signal variables ============
+elapsedMicros pulseTimeUS = 0;
+bool isVibrating = false;
+bool shouldVibrate = false;
+
+float deltaSensor = 200.0;  // for normail imu = 100, for fsr = 70
+float default_deltaSensor = 100.0;
+long deltaCurrent = 0.0;
+long cumulativeDelta = 0;
+
+float ampValue;
+float newAmpValue = 0.4;
+int freqValue = 100;
+uint32_t signalDuration;
+
+// ====== LED ======
+const uint8_t dataPin = 0;
+const uint8_t clockPin = 1;
+APA102<dataPin, clockPin> ledStrip;
+// Set the number of LEDs to control.
+const uint16_t ledCount = 1;
+rgb_color colors[ledCount];
+const uint8_t brightness = 1;
+
+// ========================= BNO085 ==========================================
 #define BNO08X_RESET -1
 Adafruit_BNO08x bno08x(BNO08X_RESET);
 sh2_SensorValue_t sensorValue;
@@ -29,83 +65,38 @@ void setReports(sh2_SensorId_t reportType, long report_interval) {
   }
 }
 
-
-// ======= DaisyVariables =========
+// ================ DaisyVariables ===============
 DaisyHardware hw;
 Svf filterLow;
 Svf filterHigh;
 size_t num_channels;
 static Oscillator osc;
 
-// ====== Audio/Haptics Flow signal variables ======
-elapsedMicros pulseTimeUS = 0;
-bool isVibrating = false;
-bool shouldVibrate = false;
-
-float deltaSensor = 40.0;
-long deltaCurrent = 0.0;
-long cumulativeDelta = 0;
-
-float ampValue;
-float newAmpValue = 0.7;
-int freqValue = 60;
-uint32_t signalDuration;
-
-const float amplitudeValues[] = { 0.9, 0.8, 0.5 };
-const float frequencyValues[] = { 50.0, 40.0, 60.0 };
-const float deltaValues[] = { 40.0, 20.0, 10.0 };
-
-// ======= IMU ========
-
-const int sampleRateHz = 100;
-unsigned long sampleInterval = 1000 / sampleRateHz;  // Convert Hz to milliseconds
-unsigned long lastSampleTime = 0;                    // Time of the last sample
-elapsedMillis timer_imu_data = 0;
-double m_x, m_y, m_z = 0.0;
-double prev_mx, prev_my, prev_mz, prev_pressure = 0.0;
-double delta_x, delta_y, delta_z, delta_pressure = 0.0;
-
-double pressure = 0.0;
-
-double velocityX = 0;
-double positionX = 0;
-double prev_positionX = 0;
-double prev_velocityX = 0;
-double velocityY = 0;
-double positionY = 0;
-double velocityZ = 0;
-double positionZ = 0;
-unsigned long prevTime = 0;
-
-float filteredAccelerationX = 0.0;  // Filtered acceleration
-float alpha = 0.1;                  // Smoothing factor for the filter (adjust as needed)
-
-uint16_t BNO055_SAMPLERATE_DELAY_MS = 2.5;  //how often to read data from the board
-uint16_t PRINT_DELAY_MS = 500;              // how often to print the data
-uint16_t printCount = 0;                    //counter to avoid printing every 10MS sample
-
-//velocity = accel*dt (dt in seconds)
-//position = 0.5*accel*dt^2
-double ACCEL_VEL_TRANSITION = (double)(BNO055_SAMPLERATE_DELAY_MS) / 1000.0;
-double ACCEL_POS_TRANSITION = 0.5 * ACCEL_VEL_TRANSITION * ACCEL_VEL_TRANSITION;
-
-
-// ==== Mean value speed ======
-const int bufferSize = 50;  // Number of values to store
-long buffer[bufferSize];    // Array to store values
-int indexX = 0;             // Current indexX in the buffer
-long sum = 0.0;             // Sum of all values in the buffer
-bool bufferFull = false;    // Flag to indicate if the buffer is full
-
-// ===== Serial communication + LED =====
-bool dataRequested = false;
-uint8_t r, g, b = 255;
-
+// ============ IMU ==============
 struct euler_t {
   float yaw;
   float pitch;
   float roll;
 } ypr;
+
+const int sampleRateHz = 100;
+unsigned long sampleInterval = 1000 / sampleRateHz;  // Convert Hz to milliseconds
+unsigned long lastSampleTime = 0;                    // Time of the last sample
+elapsedMillis timer_imu_data = 0;
+
+double sensor_imu_x, sensor_imu_y, sensor_imu_z, sensor_pressure = 0.0;
+double prev_sensor_imu_x, prev_sensor_imu_y, prev_sensor_imu_z, prev_sensor_pressure = 0.0;
+
+double delta_sensor_imu_x, delta_sensor_imu_y, delta_sensor_imu_z, delta_sensor_pressure = 0.0;
+
+unsigned long prevTime = 0;
+
+// ===== Filter some signal? ======
+
+
+// ===== Serial communication + LED =====
+bool dataRequested = false;
+uint8_t r, g, b = 255;
 
 void MyCallback(float** in, float** out, size_t size) {
   float sig;
@@ -129,8 +120,6 @@ void MyCallback(float** in, float** out, size_t size) {
 //////////////////////////////////////////
 // START - FUNCTIONS FOR GRAIN FEEDBACK //
 //////////////////////////////////////////
-
-
 
 // this function plays the grain
 void GenerateGrain(float freq, bool* vibrateFlag, float* amplitude_value, float newAmpValue) {
@@ -190,10 +179,6 @@ void modulateAmplitude() {
   //for example, speed could be the envelop
 }
 
-//////////////////////////////////////////
-// END - FUNCTIONS FOR GRAIN FEEDBACK   //
-//////////////////////////////////////////
-
 // this function triggers a grain
 void generateTrigger() {
   if (cumulativeDelta >= deltaSensor) {  //deltasensor should be a parameter, so we can modulate it
@@ -205,26 +190,61 @@ void generateTrigger() {
   }
 }
 
+void setReports(void) {
+  if (!bno08x.enableReport(SH2_LINEAR_ACCELERATION)) {
+    //Serial.println("Could not enable linear acceleration");
+  }
+}
+//////////////////////////////////////////
+// END - FUNCTIONS FOR GRAIN FEEDBACK   //
+//////////////////////////////////////////
+
 void setup() {
-  //Serial.begin(115200);
-  //while (!Serial) delay(10);  // will pause Zero, Leonardo, etc until serial console opens
+  // ====== Setting communication with XIAO! ======
+  Serial1.begin(115200);
+  // while (!Serial1) delay(10);  // will pause Zero, Leonardo, etc until serial console opens
+  //Serial.begin(9600);
+  //Serial.println("HOLA");
 
+  // ========== Fast IMU =========
+  Wire.begin();
+  Wire.setClock(400000);
+  lsm6dsoxSensor.begin();
 
-  // IMU init
-  // Try to initialize!
+  // Enable accelerometer and gyroscope, and check success
+  if (lsm6dsoxSensor.Enable_X() == LSM6DSOX_OK && lsm6dsoxSensor.Enable_G() == LSM6DSOX_OK) {
+    //Serial.println("Success enabling accelero and gyro");
+  } else {
+    //Serial.println("Error enabling accelero and gyro");
+  }
+
+  // Read ID of device and check that it is correct
+  uint8_t id;
+  lsm6dsoxSensor.ReadID(&id);
+  if (id != LSM6DSOX_ID) {
+    //Serial.println("Wrong ID for LSM6DSOX sensor. Check that device is plugged");
+  } else {
+    //Serial.println("Receviced correct ID for LSM6DSOX sensor");
+  }
+
+  // Set accelerometer scale at +- 2G. Available values are +- 2, 4, 8, 16 G
+  lsm6dsoxSensor.Set_X_FS(2);
+  // Set gyroscope scale at +- 125 degres per second. Available values are +- 125, 250, 500, 1000, 2000 dps
+  lsm6dsoxSensor.Set_G_FS(125);
+  // Set Accelerometer sample rate to 208 Hz. Available values are +- 12.0, 26.0, 52.0, 104.0, 208.0, 416.0, 833.0, 1667.0, 3333.0, 6667.0 Hz
+  lsm6dsoxSensor.Set_X_ODR(6667.0f);
+  // Set Gyroscope sample rate to 208 Hz. Available values are +- 12.0, 26.0, 52.0, 104.0, 208.0, 416.0, 833.0, 1667.0, 3333.0, 6667.0 Hz
+  lsm6dsoxSensor.Set_G_ODR(208.0f);
+
+  // ======= IMU init =======
   if (!bno08x.begin_I2C()) {
     //Serial.println("Failed to find BNO08x chip");
     while (1) { delay(10); }
   }
-  //Serial.println("BNO08x Found!");
-
-
   setReports(reportType, reportIntervalUs);
-
-  //Serial.println("Reading events");
   delay(100);
 
-  // Initialize for Daisy pod at 48kHz
+  // ======= Initialize for Daisy pod at 48kHz =======
   float sample_rate;
   hw = DAISY.init(DAISY_SEED, AUDIO_SR_48K);
   num_channels = hw.num_channels;
@@ -250,18 +270,17 @@ void setup() {
   // Daisy
   DAISY.begin(MyCallback);
 
-  // Initialize the buffer with zeros
-  for (int i = 0; i < bufferSize; i++) {
-    buffer[i] = 0;
-  }
-
   prevTime = millis();  // Initialize time
-
   setReports();
+
+  // ======= LED LOGIC =========
+  //   for (uint16_t i = 0; i < ledCount; i++) {
+  //     colors[i] = rgb_color(0, 0, 255);
+  //   }
+  //   ledStrip.write(colors, ledCount, brightness);
 }
 
 void quaternionToEuler(float qr, float qi, float qj, float qk, euler_t* ypr, bool degrees = false) {
-
   float sqr = sq(qr);
   float sqi = sq(qi);
   float sqj = sq(qj);
@@ -286,81 +305,172 @@ void quaternionToEulerGI(sh2_GyroIntegratedRV_t* rotational_vector, euler_t* ypr
   quaternionToEuler(rotational_vector->real, rotational_vector->i, rotational_vector->j, rotational_vector->k, ypr, degrees);
 }
 
-void setReports(void) {
-
-  if (!bno08x.enableReport(SH2_LINEAR_ACCELERATION)) {
-    //Serial.println("Could not enable linear acceleration");
-  }
-}
-
 void loop() {
-  // ===== Read data from IMU =======
 
 
-  if (bno08x.wasReset()) {
-    //Serial.print("sensor was reset ");
-    setReports();
-  }
+  // ========= READ BLUETOOTH DATA ==========
+  static String receivedData = "";
 
-  if (bno08x.getSensorEvent(&sensorValue)) {
-    // in this demo only one report type will be received depending on FAST_MODE define (above)
-    switch (sensorValue.sensorId) {
-      case SH2_ARVR_STABILIZED_RV:
-        quaternionToEulerRV(&sensorValue.un.arvrStabilizedRV, &ypr, true);
-      case SH2_GYRO_INTEGRATED_RV:
-        // faster (more noise?)
-        quaternionToEulerGI(&sensorValue.un.gyroIntegratedRV, &ypr, true);
+  while (Serial1.available() > 0) {
+    String receivedData = Serial1.readStringUntil(';');
+    receivedData.remove(receivedData.length() - 1);
+
+    int btvalues[7];  // Array to store the parsed integers
+    int index = 0;
+
+    while (receivedData.length() > 0) {
+      int commaIndex = receivedData.indexOf(',');  // Find the next comma
+
+      if (commaIndex == -1) {  // No more commas, get the last value
+        btvalues[index++] = receivedData.toInt();
         break;
+      }
+
+      // Extract the number before the comma
+      String numStr = receivedData.substring(0, commaIndex);
+      btvalues[index++] = numStr.toInt();
+
+      // Remove the parsed number and comma
+      receivedData = receivedData.substring(commaIndex + 1);
     }
 
-    // ======= READ FSR VALUES =======
-    int total = 0;        // Variable to store the sum of the analog readings
-    int numPins = 6;      // Number of analog pins (A0 to A5)
-    float average = 0.0;  // Variable to store the average value
+    // Assign the values
+    bt_parameter_delta_sensor = btvalues[0];
+    mode_fsr_activated = btvalues[1];
+    mode_imu_activated_x = btvalues[2];
+    mode_imu_activated_y = btvalues[3];
+    mode_imu_activated_z = btvalues[4];
+    mode_tilt_activated = btvalues[5];
+    bt_parameter_frecuency = btvalues[6];
 
-    // Loop through each analog pin and read its value
+    if (mode_imu_activated_x || mode_imu_activated_y || mode_imu_activated_z) {
+      mode_imu_activated = 1;
+    } else {
+      mode_imu_activated = 0;
+    }
+
+    deltaSensor = float(bt_parameter_delta_sensor);
+
+    lsm6dsoxSensor.Set_X_ODR(float(bt_parameter_frecuency));
+  }
+
+  if (mode_fsr_activated) {
+
+    // ======= LED LOGIC =========
+    for (uint16_t i = 0; i < ledCount; i++) {
+      colors[i] = rgb_color(255, 0, 0);
+    }
+    ledStrip.write(colors, ledCount, brightness);
+
+    // ======= READ FSR VALUES =======
+    int total = 0;
+    int numPins = 6;
+    float average = 0.0;
     for (int pin = A0; pin <= A5; pin++) {
       total += analogRead(pin);
     }
-
-    // Calculate the average
-    average = total / (float)numPins;
-
-    pressure = average;
-
-    // Print the average to the Serial Monitor
-    //Serial.print("Average value: ");
-    //Serial.println(average);
-
-    // Get roll, pitch, yaw
-    // Serial.print(sensorValue.status);
-    // Serial.print("\t");  // This is accuracy in the range of 0 to 3
-    // Serial.print(ypr.yaw);
-    // Serial.print("\t");
-    // Serial.print(ypr.pitch);
-    // Serial.print("\t");
-    // Serial.println(ypr.roll);
-
-    m_x = ypr.yaw;
-    m_y = ypr.pitch;
-    m_z = ypr.roll;
-    delta_x = fabs(m_x - prev_mx) * 10.0;
-    delta_y = fabs(m_y - prev_my) * 10.0;
-    delta_z = fabs(m_z - prev_mz) * 10.0;
-
-    delta_pressure = fabs(pressure - prev_pressure);
-
-    // deltaCurrent = delta_x + delta_y + delta_z;
-    deltaCurrent = delta_pressure;
-    cumulativeDelta += deltaCurrent;
-
-    prev_mx = m_x;
-    prev_my = m_y;
-    prev_mz = m_z;
-    prev_pressure = pressure;
-
-    // ===== Serial communication with processing ========
-    generateTrigger();  //only can trigger if the sensor values are updated
-    GenerateGrain(freqValue, &shouldVibrate, &ampValue, newAmpValue);
+    average = (total / (float)numPins) - 83;
+    sensor_pressure = average;
+    //Serial.println(analogRead(A3));
+    if (sensor_pressure > 0) {
+      delta_sensor_pressure = fabs(sensor_pressure - prev_sensor_pressure);
+      deltaCurrent = delta_sensor_pressure;
+    }
   }
+
+  if (mode_imu_activated) {
+    // ======= LED LOGIC =========
+    for (uint16_t i = 0; i < ledCount; i++) {
+      colors[i] = rgb_color(0, 0, 255);
+    }
+    ledStrip.write(colors, ledCount, brightness);
+
+    // ============= READ IMU DATA =============
+    if (bno08x.wasReset()) {
+      //Serial.print("sensor was reset ");
+      setReports();
+    }
+
+    if (bno08x.getSensorEvent(&sensorValue)) {
+      //Serial.println("imu algo");
+      switch (sensorValue.sensorId) {
+        case SH2_ARVR_STABILIZED_RV:
+          quaternionToEulerRV(&sensorValue.un.arvrStabilizedRV, &ypr, true);
+        case SH2_GYRO_INTEGRATED_RV:
+          // faster (more noise?)
+          quaternionToEulerGI(&sensorValue.un.gyroIntegratedRV, &ypr, true);
+          break;
+      }
+
+      sensor_imu_x = ypr.yaw;
+      sensor_imu_y = ypr.pitch;
+      sensor_imu_z = ypr.roll;
+
+      //Serial.println(sensor_imu_x);
+    }
+
+    // ======== GRAIN LOGIC ===========
+    delta_sensor_imu_x = fabs(sensor_imu_x - prev_sensor_imu_x) * 10.0;
+    delta_sensor_imu_y = fabs(sensor_imu_y - prev_sensor_imu_y) * 10.0;
+    delta_sensor_imu_z = fabs(sensor_imu_z - prev_sensor_imu_z) * 10.0;
+
+
+    // deltaCurrent = delta_sensor_imu_x + delta_sensor_imu_y + delta_sensor_imu_z;
+    deltaCurrent = 0;
+    if (mode_imu_activated_x) {
+      deltaCurrent += delta_sensor_imu_x;
+      //Serial.println("x");
+    }
+    if (mode_imu_activated_y) {
+      deltaCurrent += delta_sensor_imu_y;
+      //Serial.println("y");
+    }
+    if (mode_imu_activated_z) {
+      deltaCurrent += delta_sensor_imu_z;
+      //Serial.println("z");
+    }
+  }
+
+  if (mode_tilt_activated) {
+    // ======= LED LOGIC =========
+    for (uint16_t i = 0; i < ledCount; i++) {
+      colors[i] = rgb_color(0, 255, 0);
+    }
+    ledStrip.write(colors, ledCount, brightness);
+
+    // Read accelerometer
+    uint8_t acceleroStatus;
+    lsm6dsoxSensor.Get_X_DRDY_Status(&acceleroStatus);
+    if (acceleroStatus == 1) {  // Status == 1 means a new data is available
+      int32_t acceleration[3];
+      lsm6dsoxSensor.Get_X_Axes(acceleration);
+      // Plot data for each axis in mg
+      _sensor_tilt_x = acceleration[0];
+      filteredAccelerationX = alpha * _sensor_tilt_x + (1 - alpha) * filteredAccelerationX;
+      sensor_tilt_x = filteredAccelerationX;
+      if (sensor_tilt_x < 50 && sensor_tilt_x > -50) {
+        sensor_tilt_x = 0;
+      }
+      //Serial.println(sensor_tilt_x);
+    }
+
+    //Serial.println(sensor_tilt_x);
+
+    delta_sensor_tilt_x = fabs(sensor_tilt_x - prev_sensor_tilt_x);
+    deltaCurrent = delta_sensor_tilt_x;
+
+    delay(10);
+  }
+
+  cumulativeDelta += deltaCurrent;
+
+  // ========= SET PREVIOUS VALUES ==========
+  prev_sensor_imu_x = sensor_imu_x;
+  prev_sensor_imu_y = sensor_imu_y;
+  prev_sensor_imu_z = sensor_imu_z;
+  prev_sensor_pressure = sensor_pressure;
+  prev_sensor_tilt_x = sensor_tilt_x;
+
+  generateTrigger();  //only can trigger if the sensor values are updated
+  GenerateGrain(freqValue, &shouldVibrate, &ampValue, newAmpValue);
 }
