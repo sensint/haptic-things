@@ -13,7 +13,7 @@ double filteredAccelerationX = 0.0;  // Filtered acceleration
 float alpha = 0.3;                   // Smoothing factor for the filter (adjust as needed)
 
 // ====== Bluetooth control values ===========
-bool mode_fsr_activated = false;
+bool mode_fsr_activated = true;
 bool mode_imu_activated = false;
 bool mode_imu_activated_x, mode_imu_activated_y, mode_imu_activated_z = false;
 bool mode_tilt_activated = false;
@@ -25,7 +25,7 @@ elapsedMicros pulseTimeUS = 0;
 bool isVibrating = false;
 bool shouldVibrate = false;
 
-float deltaSensor = 200.0;  // for normail imu = 100, for fsr = 70
+float deltaSensor = 50.0;  // for normail imu = 100, for fsr = 70
 float default_deltaSensor = 100.0;
 long deltaCurrent = 0.0;
 long cumulativeDelta = 0;
@@ -184,7 +184,7 @@ void generateTrigger() {
   if (cumulativeDelta >= deltaSensor) {  //deltasensor should be a parameter, so we can modulate it
     shouldVibrate = true;
     cumulativeDelta = 0.0;
-
+    //Serial.println("--- NEW GRAIN ----- ");
   } else {
     shouldVibrate = false;
   }
@@ -203,7 +203,7 @@ void setup() {
   // ====== Setting communication with XIAO! ======
   Serial1.begin(115200);
   // while (!Serial1) delay(10);  // will pause Zero, Leonardo, etc until serial console opens
-  //Serial.begin(9600);
+ //Serial.begin(9600);
   //Serial.println("HOLA");
 
   // ========== Fast IMU =========
@@ -336,12 +336,13 @@ void loop() {
 
     // Assign the values
     bt_parameter_delta_sensor = btvalues[0];
-    mode_fsr_activated = btvalues[1];
-    mode_imu_activated_x = btvalues[2];
-    mode_imu_activated_y = btvalues[3];
-    mode_imu_activated_z = btvalues[4];
-    mode_tilt_activated = btvalues[5];
-    bt_parameter_frecuency = btvalues[6];
+    freqValue = btvalues[1];
+    mode_fsr_activated = btvalues[2];
+    mode_imu_activated_x = btvalues[3];
+    mode_imu_activated_y = btvalues[4];
+    mode_imu_activated_z = btvalues[5];
+    mode_tilt_activated = btvalues[6];
+    bt_parameter_frecuency = btvalues[7];
 
     if (mode_imu_activated_x || mode_imu_activated_y || mode_imu_activated_z) {
       mode_imu_activated = 1;
@@ -369,13 +370,15 @@ void loop() {
     for (int pin = A0; pin <= A5; pin++) {
       total += analogRead(pin);
     }
-    average = (total / (float)numPins) - 83;
+    average = ((total / (float)numPins));
     sensor_pressure = average;
-    //Serial.println(analogRead(A3));
-    if (sensor_pressure > 0) {
-      delta_sensor_pressure = fabs(sensor_pressure - prev_sensor_pressure);
-      deltaCurrent = delta_sensor_pressure;
-    }
+    //Serial.println(sensor_pressure);
+    //  if (sensor_pressure > 20) {
+    delta_sensor_pressure = abs(sensor_pressure - prev_sensor_pressure);
+    deltaCurrent = delta_sensor_pressure;
+    // }
+
+    delay(10);
   }
 
   if (mode_imu_activated) {
@@ -463,7 +466,7 @@ void loop() {
   }
 
   cumulativeDelta += deltaCurrent;
-
+  //Serial.println(cumulativeDelta);
   // ========= SET PREVIOUS VALUES ==========
   prev_sensor_imu_x = sensor_imu_x;
   prev_sensor_imu_y = sensor_imu_y;
