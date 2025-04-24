@@ -14,3 +14,50 @@ A self-contained 3D-printed cube tangible enabling compliance illusion and frict
 6. [Force Sensing Resistors: FSR03](https://www.ohmite.com/catalog/fsr-series/FSR03CE)
 7. [Battery management: Powerboost 1000](https://www.adafruit.com/product/2465)
 8. [Battery: Generic 3.7v Lipo]
+
+# Wiring 
+
+                           +-----------------------------+
+                           |        Daisy Seed MCU       |
+                           |                             |
+                           |  A0 ──> FSR 1                |
+                           |  A1 ──> FSR 2                |
+                           |  A2 ──> FSR 3                |
+                           |  A3 ──> FSR 4                |
+                           |  A4 ──> FSR 5                |
+                           |  A5 ──> FSR 6                |
+                           |                             |
+                           |  SCL1 ─────┐                 |
+                           |  SDA1 ─────┘──> BNO085       |
+                           |                             |
+                           |  TX1 ─────────┐              |
+                           |  RX1 ◄────────┘──> Wemos D1  |
+                           |                             |
+                           |  D0 ──> LED CLK              |
+                           |  D1 ──> LED DI               |
+                           |                             |
+                           |  AUDIO OUT 1 ──> Class D Amp |
+                           |                             |
+                           |  VIN ─────┬────────┐         |
+                           |  DGND ────┘        │         |
+                           +-------------------│---------+
+                                               │
+                              +----------------▼----------------+
+                              |        PowerBoost 1000          |
+                              |   5V OUT ─────┬──────────────────┐
+                              |               │                  │
+                              |              GND────────────────┘
+                              +---------------┼------------------+
+                                              ▼
+                                  +---------------------+
+                                  |     Wemos D1        |
+                                  |   3V3 ◄─────────────┘
+                                  |   GND ◄─────────────┘
+                                  +---------------------+
+
+                                  +---------------------+
+                                  |   Class D Amp       |
+                                  |   3V3 ◄─────────────┘
+                                  |   GND ◄─────────────┘
+                                  +---------------------+
+
