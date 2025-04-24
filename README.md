@@ -1,14 +1,16 @@
-# SensintShapes? 😶
+# HAPTICUBES 🧊🧊🧊
 
-![alt text](image.webp)
+![alt text](Pictures/DSCF5339.webp)
 
-## Idea
-The idea is to build self-contained 3D-printed objects, such as spheres and cubes, and embed the illusion of friction in them. Ideally, we should be able to change the vibration parameters using Bluetooth.
+## Project
+A self-contained 3D-printed cube tangible enabling compliance illusion and friction illusion based on motion-coupled vibrotactile actuation.
 
 ## Components
-1. [Actuator: VG1040003D](https://www.digikey.com/en/products/detail/vybronics-inc/VG1040003D/10285886). It is the closest replacement to the one used in vARitouch.
+1. [Actuator: HAPCOIL-ONE](https://tactilelabs.com/product/hapcoil-one/)
 2. [IMU: BNO085](https://www.adafruit.com/product/4754)
-3. [Microcontroller: Daisy Seed](https://electro-smith.com/products/daisy-seed)
-4. [Amplifier: PAM8302](https://www.adafruit.com/product/2130)
-5. [Bluetooth: XIAO nRF52840](https://www.seeedstudio.com/Seeed-XIAO-BLE-nRF52840-p-5201.html). It also included Wi-Fi. I haven't checked about the battery management for this one.
-6. Battery? Not decided yet.
+3. [Main MCU: Daisy Seed](https://electro-smith.com/products/daisy-seed)
+4. [Class D Amplifier: PAM8302](https://www.adafruit.com/product/2130)
+5. [Wifi MCU: Wemos D1 Mini](https://www.wemos.cc/en/latest/d1/d1_mini.html)
+6. [Force Sensing Resistors: FSR03](https://www.ohmite.com/catalog/fsr-series/FSR03CE)
+7. [Battery management: Powerboost 1000](https://www.adafruit.com/product/2465)
+8. [Battery: Generic 3.7v Lipo]
