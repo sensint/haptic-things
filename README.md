@@ -1,9 +1,9 @@
-# HAPTICUBES 🧊🧊🧊
+# HAPTICUBES 🧊
 
-![alt text](Pictures/DSCF5339.webp)
+![alt text](Pictures/IMG_7376.webp)
 
 ## Project
-A self-contained 3D-printed cube tangible enabling compliance illusion and friction illusion based on motion-coupled vibrotactile actuation.
+A self-contained 3D-printed cube tangible enabling compliance illusion and friction illusion based on motion-coupled vibrotactile rendering with WIFI control.
 
 ## Components
 1. [Actuator: HAPCOIL-ONE](https://tactilelabs.com/product/hapcoil-one/)
