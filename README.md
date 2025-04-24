@@ -30,16 +30,16 @@ A self-contained 3D-printed cube tangible enabling compliance illusion and frict
                            |  SCL1 ─────┐                |
                            |  SDA1 ─────┘──> BNO085      |
                            |                             |
-                           |  TX1 ─────────┐             |
-                           |  RX1 ◄────────┘──> Wemos D1 |
+                           |  TX1 ◄─────────> Weemos D2  |
+                           |  RX1 ◄─────────> Weemos D3  |
                            |                             |
                            |  D0 ──> LED CLK             |
                            |  D1 ──> LED DI              |
                            |                             |
                            |  AUDIO OUT 1 ──> Class D Amp|
                            |                             |
-                           |  VIN ─────┬────────┐        |
-                           |  DGND ────┘        │        |
+                           |  VIN ─────┬───────┐         |
+                           |  DGND ────┘       │         |
                            +-------------------│---------+
                                                │
                               +----------------▼----------------+
