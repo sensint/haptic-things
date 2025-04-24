@@ -28,7 +28,7 @@ A self-contained 3D-printed cube tangible enabling compliance illusion and frict
                            |  A5 ──> FSR 6               |
                            |                             |
                            |  SCL1 ─────┐                |
-                           |  SDA1 ─────┘──> BNO085      |
+                           |  SDA1 ─────┘──> BNO085 I2C  |
                            |                             |
                            |  TX1 ◄─────────> Weemos D2  |
                            |  RX1 ◄─────────> Weemos D3  |
@@ -38,8 +38,8 @@ A self-contained 3D-printed cube tangible enabling compliance illusion and frict
                            |                             |
                            |  AUDIO OUT 1 ──> Class D Amp|
                            |                             |
-                           |  VIN ─────┬───────┐         |
-                           |  DGND ────┘       │         |
+                           |  VIN ────┬────────┐         |
+                           |  DGND ───┘── AGND │         |
                            +-------------------│---------+
                                                │
                               +----------------▼----------------+
