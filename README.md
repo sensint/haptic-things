@@ -34,8 +34,8 @@ A self-contained 3D-printed cube tangible enabling compliance illusion and frict
                            |  TX1 ◄─────────> Weemos D2  |
                            |  RX1 ◄─────────> Weemos D3  |
                            |                             |
-                           |  D0 ──> LED CLK             |
-                           |  D1 ──> LED DI              |
+                           |  D0 ──> LED DI             |
+                           |  D1 ──> LED CLK             |
                            |                             |
                            |  AUDIO OUT 1 ──> Class D Amp|
                            |                             |
