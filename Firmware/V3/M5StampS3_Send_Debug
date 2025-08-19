@@ -1,0 +1,24 @@
+/*
+ * M5 Stamp S3 - Serial Communication
+ * Sends "ESPNOW,X,X,X;" message every second through Serial1
+ * TX: GPIO1, RX: GPIO2, Baud Rate: 9600
+ */
+
+void setup() {
+  // Initialize Serial for debugging
+  Serial.begin(115200);
+  
+  // Initialize Serial1 with specified pins and baud rate
+  // Serial1.begin(baud_rate, config, RX_pin, TX_pin)
+  Serial1.begin(9600, SERIAL_8N1, 2, 1);  // RX=GPIO2, TX=GPIO1
+  
+  Serial.println("M5 Stamp S3 Serial Communication Started");
+  Serial.println("Sending 'ESPNOW' every second on Serial1");
+  Serial.println("TX: GPIO1, RX: GPIO2, Baud: 9600");
+}
+
+void loop() {
+  Serial1.println("ESPNOW,0,0,0;");
+  Serial.println("Sent: ESPNOW");
+  delay(1000);
+}
