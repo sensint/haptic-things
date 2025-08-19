@@ -1,0 +1,77 @@
+#include <WiFi.h>
+#include <esp_now.h>
+
+#define DEVICE_ID 1
+
+// --- Daisy serial connection on pins 1 (TX) and 2 (RX) --- //
+HardwareSerial daisySerial(1); // Using UART1
+
+typedef struct VibeData {
+  uint8_t id;
+  uint16_t frequency;
+  uint32_t duration_us;
+  float amplitude;
+} VibeData;
+
+VibeData vibeData;
+
+void sendToDaisy(uint16_t freq, uint32_t dur, float amp) {
+  char buf[50];
+  snprintf(buf, sizeof(buf), "ESPNOW,%u,%lu,%.2f;", freq, dur, amp);
+  daisySerial.println(buf);
+}
+
+volatile bool dataReady = false;
+
+// New-style callback for ESP32-S3
+void messageReceived(const esp_now_recv_info_t *info, const uint8_t *incomingData, int len) {
+  if (len == sizeof(VibeData)) {
+    memcpy(&vibeData, incomingData, sizeof(VibeData));
+    if (vibeData.id == DEVICE_ID) {
+      sendToDaisy(vibeData.frequency, vibeData.duration_us, vibeData.amplitude);
+      dataReady = true;
+    }
+  }
+}
+
+void setup() {
+  setCpuFrequencyMhz(240); // Max ESP32-S3 clock speed
+
+  Serial.begin(115200);
+
+  // Init UART1 on GPIO1 (TX) and GPIO2 (RX)
+  daisySerial.begin(9600, SERIAL_8N1, 2, 1);
+
+  delay(50);
+
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  WiFi.setSleep(false);
+
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("ESP-NOW init failed");
+    while (true) delay(100);
+  }
+
+  esp_now_register_recv_cb(messageReceived);
+
+  Serial.println("ESP-NOW low-latency receiver ready");
+  Serial.println("MAC: " + WiFi.macAddress());
+}
+
+void loop() {
+  static uint32_t lastPrint = 0;
+  if (dataReady && millis() - lastPrint > 10) {
+    dataReady = false;
+    Serial.printf("RX -> Freq: %u Hz | Dur: %lu us | Amp: %.2f\n",
+                  vibeData.frequency, vibeData.duration_us, vibeData.amplitude);
+    lastPrint = millis();
+
+    
+  }
+
+  if (daisySerial.available()) {
+    String msg = daisySerial.readStringUntil('\n');
+    Serial.println("<- Daisy: " + msg);
+  }
+}
