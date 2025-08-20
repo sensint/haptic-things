@@ -1,0 +1,178 @@
+/* ESP8266 (D1 R2 & MINI) Web GUI with Feedback presets
+  ESPNOW mode need tracking (there is a debug sender code that simulate rig data if needed)
+  Presets struct stores parameters [Mode, Axis, Frequency, Amplitude, Threshold]
+  Mode -> 0 = Off | 1 = FSR | 2 = Gyroscope | 3 = Accelerometer(Unused) | 4 = ESPNOW receive | 5 = Other
+  Axis -> 0 = XYZ | 2 = X | 3 = Y | 4 = Z | 5 = XY | 6 = YZ | 7 = XZ (unsure about the order of the last two)
+
+*/
+
+#include <ESP8266WiFi.h>
+#include <ESP8266WebServer.h>
+#include <SoftwareSerial.h>
+
+// WiFi credentials
+const char* ssid = "TU VEUX MON WIFI?";
+const char* password = "ouiouioui";
+
+// Web server on port 80
+ESP8266WebServer server(80);
+
+IPAddress local_IP(192, 168, 137, 104);
+IPAddress gateway(192, 168, 137, 1);
+IPAddress subnet(255, 255, 255, 0);
+IPAddress primaryDNS(8, 8, 8, 8);
+IPAddress secondaryDNS(8, 8, 4, 4);
+
+// Software serial for communication with Daisy
+SoftwareSerial daisySerial(D2, D3); // RX, TX
+
+// Current parameter values
+int currentMode = 1; 
+int currentAxis = 0; 
+int currentFreq = 150;
+float currentAmp = 0.7;
+int currentDelta = 15;
+String currentModeName = "FSR 1";
+
+// Preset definition
+struct Preset {
+  int mode;
+  int axis;
+  int freq;
+  float amp;
+  int delta;
+  const char* name;
+};
+
+Preset presets[] = {
+  {0, 0, 150, 0.0, 10, "OFF"},
+  {1, 0, 120, 0.6,  8, "FSR 1"},
+  {1, 3,  65, 0.5, 15, "FSR 2"},
+  {2, 1, 120, 0.5,  5, "GYRO 1"},
+  {2, 0, 180, 0.6,  8, "GYRO 2"},
+  {4, 0,  65, 0.5,  1, "TRACKING 1"},
+  {4, 0, 120, 0.6,  1, "TRACKING 2"},
+  {5, 0,  65, 0.6, 15, "OTHER 1"},
+  {5, 0, 250, 0.7, 10, "OTHER 2"},
+};
+
+void setup() {
+  Serial.begin(115200);  
+  daisySerial.begin(9600); 
+
+  if (!WiFi.config(local_IP, gateway, subnet, primaryDNS, secondaryDNS)) {
+    Serial.println("STA Failed to configure static IP");
+  }
+
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to WiFi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(100);
+    Serial.print(".");
+  }
+  Serial.println();
+
+  server.on("/", handleRoot);
+  server.on("/set", handleSet);
+  server.begin();
+  Serial.println("HTTP server started");
+  Serial.print("Connected! IP address: ");
+  Serial.println(WiFi.localIP());
+}
+
+void loop() {
+  server.handleClient();
+
+  if (daisySerial.available()) {
+    String data = daisySerial.readStringUntil('\n');
+    Serial.println("From Daisy: " + data);
+  }
+}
+
+// Send HTML page
+void handleRoot() {
+  String html = "<!DOCTYPE html><html><head>";
+  html += "<meta name='viewport' content='width=device-width, initial-scale=1'>";
+  html += "<style>";
+  html += "body { font-family: Arial; margin: 20px; max-width: 500px; }";
+  html += "button { padding: 10px; margin: 5px; cursor: pointer; }";
+  html += ".active { background-color: #4CAF50; color: white; }";
+  html += "</style>";
+  html += "</head><body>";
+  html += "<h1>Haptic Controller</h1>";
+  html += "<h2>Cube Portal #4</h2>";
+  
+  // Preset buttons
+  html += "<div><h3>Presets:</h3>";
+  for (int i = 1; i < (sizeof(presets)/sizeof(presets[0])); i++) {
+    html += "<button id='preset" + String(i) + "' onclick='setPreset(" + String(i) + ")'>" + presets[i].name + "</button>";
+  }
+  html += "</div><hr>";
+
+  // Current values
+  html += "<h3>Current Mode: <span id='modeName'>" + currentModeName + "</span></h3>";
+  html += "<h3>Axis: <span id='axisValue'>" + String(currentAxis) + "</span></h3>";
+  html += "<h3>Frequency: <span id='freqValue'>" + String(currentFreq) + "</span> Hz</h3>";
+  html += "<h3>Amplitude: <span id='ampValue'>" + String(currentAmp) + "</span></h3>";
+  html += "<h3>Delta Threshold: <span id='deltaValue'>" + String(currentDelta) + "</span></h3>";
+
+  // JavaScript
+  html += "<script>";
+  html += "function setPreset(p) {";
+  html += "  document.querySelectorAll('button[id^=\"preset\"]').forEach(btn => btn.classList.remove('active'));";
+  html += "  document.getElementById('preset'+p).classList.add('active');";
+  html += "  fetch('/set?preset=' + p).then(r => r.json()).then(data => {";
+  html += "    document.getElementById('modeName').textContent = data.name;";
+  html += "    document.getElementById('axisValue').textContent = data.axis;";
+  html += "    document.getElementById('freqValue').textContent = data.freq;";
+  html += "    document.getElementById('ampValue').textContent = data.amp;";
+  html += "    document.getElementById('deltaValue').textContent = data.delta;";
+  html += "  });";
+  html += "}";
+  html += "</script>";
+
+  html += "</body></html>";
+  
+  server.send(200, "text/html", html);
+}
+
+// Handle parameter changes
+void handleSet() {
+  bool changed = false;
+
+  if (server.hasArg("preset")) {
+    int p = server.arg("preset").toInt();
+    if (p >= 0 && p < (sizeof(presets) / sizeof(presets[0]))) {
+      currentMode = presets[p].mode;
+      currentAxis = presets[p].axis;
+      currentFreq = presets[p].freq;
+      currentAmp  = presets[p].amp;
+      currentDelta= presets[p].delta;
+      currentModeName = presets[p].name;
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    String cmd = "SET," + String(currentMode) + "," +
+                String(currentAxis) + "," + 
+                String(currentFreq) + "," + 
+                String(currentAmp) + "," + 
+                String(currentDelta) + ";";
+    daisySerial.println(cmd);
+    daisySerial.flush();
+    delay(50);
+    Serial.println("Sent to Daisy: " + cmd);
+  }
+
+  // Return JSON with current values
+  String json = "{";
+  json += "\"mode\":" + String(currentMode) + ",";
+  json += "\"axis\":" + String(currentAxis) + ",";
+  json += "\"freq\":" + String(currentFreq) + ",";
+  json += "\"amp\":" + String(currentAmp) + ",";
+  json += "\"delta\":" + String(currentDelta) + ",";
+  json += "\"name\":\"" + currentModeName + "\"";
+  json += "}";
+  server.send(200, "application/json", json);
+}
