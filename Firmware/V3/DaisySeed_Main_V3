@@ -13,6 +13,8 @@
 #include <APA102.h>
 #include <Adafruit_BNO08x.h>
 //#include <SoftwareSerial.h>
+#include <SD.h>
+#include<SPI.h>
 
 // --- Serial Buffers for RX/TX COM --- //
 HardwareSerial Serial5(D5, D6);  // RX=D5, TX=D6
@@ -24,10 +26,26 @@ int serial1BufferIndex = 0;
 char serial5Buffer[SERIAL_BUFFER_SIZE];
 int serial5BufferIndex = 0;
 
+// CS pin for SD
+const int chipSelect = D7;
+
+// Temporarily defining gui information for SD
+
+int recordState = 0;
+String expState = "e";  //needs to be input from gui
+String participant = "p2"; //needs to be input from gui
+String vibration = "x";  //needs to be input from gui
+String fileName;
+
+// track file creation
+File dataFile;
+bool fileCreated = false;
+
 // --- FSR --- //
 float smoothedPressureA, smoothedPressureB, smoothedPressureC = 0;
 float alpha = 0.5;
 int offset = 3;
+int r_sensor0, r_sensor1, r_sensor2, r_sensor3, r_sensor4, r_sensor5;
 int sensor0, sensor1, sensor2, sensor3, sensor4, sensor5;
 float smoothBuffer0, smoothBuffer1, smoothBuffer2, smoothBuffer3, smoothBuffer4, smoothBuffer5, smoothBufferLin0, smoothBufferLin1, smoothBufferLin2, smoothBufferLin3, smoothBufferLin4, smoothBufferLin5, smoothBufferA, smoothBufferB, smoothBufferC;
 
@@ -219,6 +237,16 @@ void setup() {
   delay(1000);
 
   Serial.println("Bonjour, Hola, Hello :-)");
+  // see if the SD card is present and can be initialized:
+  if (!SD.begin(chipSelect)) {
+    Serial.println("Card failed, or not present");
+    // Blink LEDs forever and STOP everything else
+    flashLED();
+  } else {
+    Serial.println("Card initialised");
+  }
+  
+
   Serial.println("Adafruit BNO08x test!");
   // Try to initialize!
   if (!bno08x.begin_I2C()) {
@@ -237,7 +265,22 @@ void setup() {
 void loop() {
 
   unsigned long currentPrintMicros = micros();
-  checkSerial1();
+  checkSerialInput();  // replace with actual check from gui
+  // If start recording pressed
+  if (recordState == 1 && !fileCreated) {
+      fileName = expState + participant + vibration + ".csv";  
+      dataFile = SD.open(fileName, FILE_WRITE);
+      if (dataFile) {
+          // Write header
+          dataFile.println("Time,Sensor0,Sensor1,Sensor2,Sensor3,Sensor4,Sensor5");
+          dataFile.close();
+          fileCreated = true; 
+          Serial.println("Recording started, file created with header");
+      } else {
+          Serial.println("Error creating file!");
+          flashLED();
+      }
+  }
 
   //////////////////
   //   OFF MODE   //
@@ -248,13 +291,13 @@ void loop() {
     // --- LED management --- // just blink red
     brightness = 15 ; // 
     for(uint16_t i = 0; i < ledCount; i++) {
-        colors[i] = rgb_color(255,0,0);
+        colors[i] = rgb_color(100,0,0);
         ledStrip.write(colors, ledCount, brightness);
       }
     delay(100);
     brightness = 0;
     for(uint16_t i = 0; i < ledCount; i++) {
-        colors[i] = rgb_color(255,0,0);
+        colors[i] = rgb_color(100,0,0);
         ledStrip.write(colors, ledCount, brightness);
       }
     delay(100);
@@ -277,13 +320,56 @@ void loop() {
 
     // --- READ FSR VALUES --- // 
 
+    // Raw Values
+
+    r_sensor0 = analogRead(A0);
+    r_sensor1 = analogRead(A1);
+    r_sensor2 = analogRead(A2);
+    r_sensor3 = analogRead(A3);
+    r_sensor4 = analogRead(A4);
+    r_sensor5 = analogRead(A5);
+
+    checkSerialInput(); //replace with actual check from gui
+    if (recordState == 1){
+      File dataFile = SD.open(fileName, FILE_WRITE);
+
+      if (dataFile) {
+        // Write raw sensor readings as CSV
+        dataFile.print(millis());
+        dataFile.print(",");
+        dataFile.print(r_sensor0);
+        dataFile.print(",");
+        dataFile.print(r_sensor1);
+        dataFile.print(",");
+        dataFile.print(r_sensor2);
+        dataFile.print(",");
+        dataFile.print(r_sensor3);
+        dataFile.print(",");
+        dataFile.print(r_sensor4);
+        dataFile.print(",");
+        dataFile.println(r_sensor5);  // last value, end line
+        dataFile.flush();
+
+        dataFile.close(); // important to save
+      } else {
+        Serial.println("Error opening file for writing!");
+        flashLED();
+      }
+    }
+    // Reset fileCreated when recording stops
+    if (recordState == 0 && fileCreated) {
+      if (dataFile) dataFile.close();
+      fileCreated = false;
+      Serial.println("Recording stopped");
+    }
+
     // here is directly smoothed value u can create a new var for storing raw analog reads 
-    sensor0 = smooth(analogRead(A0), &smoothBuffer0, 0.6); // subtle smoothing before linearization, 0.6 is enough
-    sensor1 = smooth(analogRead(A1), &smoothBuffer1, 0.6);
-    sensor2 = smooth(analogRead(A2), &smoothBuffer2, 0.6);
-    sensor3 = smooth(analogRead(A3), &smoothBuffer3, 0.6);
-    sensor4 = smooth(analogRead(A4), &smoothBuffer4, 0.6);
-    sensor5 = smooth(analogRead(A5), &smoothBuffer5, 0.6);
+    sensor0 = smooth(r_sensor0, &smoothBuffer0, 0.6); // subtle smoothing before linearization, 0.6 is enough
+    sensor1 = smooth(r_sensor1, &smoothBuffer1, 0.6);
+    sensor2 = smooth(r_sensor2, &smoothBuffer2, 0.6);
+    sensor3 = smooth(r_sensor3, &smoothBuffer3, 0.6);
+    sensor4 = smooth(r_sensor4, &smoothBuffer4, 0.6);
+    sensor5 = smooth(r_sensor5, &smoothBuffer5, 0.6);
     
     // --- Linearize FSR response --- //
     double linSensor0 = map(smooth(linearize(sensor0, 3), &smoothBufferLin0, 0.6), 0, 1024, 0, 360); // exponent 2-4 give good results, alpha of 0.4 - 0.5
@@ -844,6 +930,8 @@ bool isFloat(String s) {
 }
 
 // Process commands from Serial1 (WebGUI)// add a ExperimentalModeState mode and start and stop to this one
+// ExperimentantalModeState : Exploratory, Confirmatory
+// RecordingState : Start Recording - 1 , Stop Recording - 0
 void processSerial1Command(char* cmd) {
   if (strncmp(cmd, "SET,", 4) != 0) return;
 
@@ -906,6 +994,20 @@ void processSerial5EspNowCommand(char* cmd) {
   //Serial.printf("ESPNOW parsed -> Freq: %u Hz, Dur: %lu us, Amp: %.2f\n",
                 //espnowFreq, espnowDur, espnowAmp);
 }
+ //temporarily for serial
+void checkSerialInput() {
+  if (Serial.available() > 0) {
+    char cmd = Serial.read();  // read one character
+    if (cmd == 's') {          // start recording
+      recordState = 1;
+      Serial.println("Recording STARTED via Serial");
+    } else if (cmd == 'x') {   // stop recording
+      recordState = 0;
+      Serial.println("Recording STOPPED via Serial");
+    }
+  }
+}
+
 
 // Check Serial1 for WebGUI commands
 void checkSerial1() {
@@ -1012,5 +1114,22 @@ void updateTotalAngles(float current_x, float current_y, float current_z) {
   float totalYRad = toRad(totalAngle_y);
   float totalZRad = toRad(totalAngle_z);
 }
+
+// Function to blink LED for SD errors
+void flashLED() {
+  while (true) {
+    int brightness = 15; 
+    for (uint16_t i = 0; i < ledCount; i++) {
+      colors[i] = rgb_color(255, 0, 0); // red
+    }
+    ledStrip.write(colors, ledCount, brightness);
+    delay(100);
+
+    brightness = 0;
+    ledStrip.write(colors, ledCount, brightness);
+    delay(100);
+  }
+}
+
 
 //   s e e   u   c y b e r s p a c e   c o w b o y   //
